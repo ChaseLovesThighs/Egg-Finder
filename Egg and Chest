@@ -1,0 +1,263 @@
+--[[
+SIGMA Luck Viewer - Mobile + PC Adaptive Version with Teleport Buttons Sorted by Y-level
+]]--
+
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+
+local isMobile = UserInputService.TouchEnabled
+
+local mainGui = Instance.new("ScreenGui", playerGui)
+mainGui.Name = "SIGMA LUCK THINGY"
+mainGui.ResetOnSpawn = false
+
+local mainFrame = Instance.new("Frame", mainGui)
+mainFrame.Name = "MainFrame"
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+
+-- Set size and position based on device
+if isMobile then
+	mainFrame.Size = UDim2.new(0, 400, 0, 275)
+	mainFrame.Position = UDim2.new(0.5, -130, 0.5, -137)
+else
+	mainFrame.Size = UDim2.new(0, 985, 0, 365)
+	mainFrame.Position = UDim2.new(0.5, -492, 0.5, -182)
+end
+
+local titleBar = Instance.new("TextLabel", mainFrame)
+titleBar.Size = UDim2.new(1, 0, 0, 30)
+titleBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+titleBar.Text = "SIGMA Luck Viewer"
+titleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleBar.Font = "SourceSansBold"
+titleBar.TextSize = 20
+titleBar.TextXAlignment = "Left"
+titleBar.Name = "TitleBar"
+
+local closeButton = Instance.new("TextButton", titleBar)
+closeButton.Size = UDim2.new(0, 30, 1, 0)
+closeButton.Position = UDim2.new(1, -30, 0, 0)
+closeButton.Text = "X"
+closeButton.BackgroundColor3 = Color3.fromRGB(60, 0, 0)
+closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.Font = "SourceSansBold"
+closeButton.TextSize = 18
+
+local minimizeButton = Instance.new("TextButton", titleBar)
+minimizeButton.Size = UDim2.new(0, 30, 1, 0)
+minimizeButton.Position = UDim2.new(1, -60, 0, 0)
+minimizeButton.Text = "-"
+minimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 0)
+minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeButton.Font = "SourceSansBold"
+minimizeButton.TextSize = 18
+
+local refreshButton = Instance.new("TextButton", mainFrame)
+refreshButton.Size = UDim2.new(0, 100, 0, 25)
+refreshButton.Position = UDim2.new(1, -110, 0, 35)
+refreshButton.Text = "🔄 Refresh"
+refreshButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+refreshButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+refreshButton.Font = "SourceSans"
+refreshButton.TextSize = 16
+
+local webhookInputBox = Instance.new("TextBox", mainFrame)
+webhookInputBox.Size = UDim2.new(0, 200, 0, 25)
+webhookInputBox.Position = UDim2.new(0, 10, 0, 35)
+webhookInputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+webhookInputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+webhookInputBox.Font = "SourceSans"
+webhookInputBox.TextSize = 16
+webhookInputBox.PlaceholderText = "Put webhook URL here"
+webhookInputBox.Text = ""
+webhookInputBox.TextWrapped = false
+webhookInputBox.TextXAlignment = Enum.TextXAlignment.Left
+
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Name = "ScrollFrame"
+scrollFrame.Size = UDim2.new(1, -20, 1, -70)
+scrollFrame.Position = UDim2.new(0, 10, 0, 65)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.ScrollBarThickness = 6
+scrollFrame.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout", scrollFrame)
+layout.Padding = UDim.new(0, 5)
+layout.SortOrder = "LayoutOrder"
+
+-- Teleport function using smooth movement
+local root = player.Character:WaitForChild("HumanoidRootPart")
+
+local function stepTo(targetCFrame, stepSize, delayTime)
+    local current = root.CFrame
+    local distance = (targetCFrame.Position - current.Position).Magnitude
+    local steps = math.floor(distance / stepSize)
+
+    for i = 1, steps do
+        local progress = i / steps
+        local newPosition = current.Position:Lerp(targetCFrame.Position, progress)
+        local newCFrame = CFrame.new(newPosition) * (targetCFrame - targetCFrame.Position)
+        root.CFrame = newCFrame
+        task.wait(delayTime)
+    end
+
+    root.CFrame = targetCFrame -- snap to final position
+end
+
+-- Function to send data to Discord (unchanged)
+local function sendToDiscord(username, itemName, percentage)
+    local webhookURL = webhookInputBox.Text
+    if webhookURL == "" then
+        webhookURL = " "
+    end
+
+    local data = {
+        ["content"] = "<@595483398882066434> " .. username .. " just hatched " .. itemName .. percentage
+    }
+
+    local jsonData = HttpService:JSONEncode(data)
+
+    pcall(function()
+        HttpService:PostAsync(webhookURL, jsonData, Enum.HttpContentType.ApplicationJson)
+    end)
+end
+
+local function refreshEggsAndChests()
+    -- Clear existing items
+    for _, child in ipairs(scrollFrame:GetChildren()) do
+        if child:IsA("TextLabel") or child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    local rendered = workspace:FindFirstChild("Rendered")
+    local riftsFolder = rendered and rendered:FindFirstChild("Rifts")
+    if not riftsFolder then return end
+
+    -- Store eggs and chests in a table to sort them by Y-level
+    local items = {}
+
+    -- Collect all eggs and chests
+    for _, item in ipairs(riftsFolder:GetChildren()) do
+        if item:IsA("Model") and (item.Name:match("%-egg$") or item.Name:match("golden%-chest") or item.Name:match("royal%-chest")) then
+            local luckText = "N/A"
+            local timerText = "N/A"
+            local display = item:FindFirstChild("Display")
+            if display then
+                local gui = display:FindFirstChild("SurfaceGui")
+                local icon = gui and gui:FindFirstChild("Icon")
+                local luck = icon and icon:FindFirstChild("Luck")
+                local timer = gui and gui:FindFirstChild("Timer")
+                if luck and luck:IsA("TextLabel") then
+                    luckText = luck.Text
+                end
+                if timer and timer:IsA("TextLabel") then
+                    timerText = timer.Text
+                end
+            end
+
+            -- Get the Y level of the item
+            local yValue = 0
+            if typeof(item.GetPivot) == "function" then
+                yValue = item:GetPivot().Position.Y
+            elseif item.PrimaryPart then
+                yValue = item.PrimaryPart.Position.Y
+            end
+
+            table.insert(items, { item = item, luckText = luckText, timerText = timerText, yValue = yValue })
+        end
+    end
+
+    -- Sort items by their Y-level (ascending order)
+    table.sort(items, function(a, b)
+        return a.yValue < b.yValue
+    end)
+
+    -- Create UI for each item
+    for _, data in ipairs(items) do
+        local item = data.item
+        local luckText = data.luckText
+        local timerText = data.timerText
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -10, 0, 25)
+        label.BackgroundTransparency = 1
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.Font = "SourceSans"
+        label.TextSize = 18
+        label.TextXAlignment = "Left"
+        label.Text = string.format("%s | Luck: %s | Y: %.1f | Timer: %s", item.Name, luckText, data.yValue, timerText)
+        label.Parent = scrollFrame
+
+        -- Create teleport button below the item
+        local teleportButton = Instance.new("TextButton")
+        teleportButton.Size = UDim2.new(0, 100, 0, 30)  -- Adjust size for each item
+        teleportButton.Text = "🔮 Teleport"
+        teleportButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        teleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        teleportButton.Font = "SourceSans"
+        teleportButton.TextSize = 16
+        teleportButton.Position = UDim2.new(1, -110, 0, 25) -- Position below the label
+        teleportButton.Parent = scrollFrame
+
+        -- Teleport action when the button is clicked
+        teleportButton.MouseButton1Click:Connect(function()
+            local cframeToTeleport = item.PrimaryPart and item.PrimaryPart.CFrame or item:GetPivot()
+            if cframeToTeleport then
+                stepTo(cframeToTeleport, 25, 0.025) -- Use the stepTo function for smooth teleportation
+            end
+        end)
+    end
+
+    -- Update the canvas size based on content
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+end
+
+local function watchRiftsFolder()
+    local rendered = workspace:WaitForChild("Rendered", 5)
+    local riftsFolder = rendered and rendered:FindFirstChild("Rifts")
+    if not riftsFolder then return end
+
+    riftsFolder.ChildAdded:Connect(refreshEggsAndChests)
+    riftsFolder.ChildRemoved:Connect(refreshEggsAndChests)
+end
+
+local minimized = false
+local function toggleMinimize()
+    minimized = not minimized
+    scrollFrame.Visible = not minimized
+    refreshButton.Visible = not minimized
+    webhookInputBox.Visible = not minimized
+end
+
+minimizeButton.MouseButton1Click:Connect(toggleMinimize)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.K then
+        toggleMinimize()
+    end
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+    mainGui:Destroy()
+end)
+
+refreshButton.MouseButton1Click:Connect(refreshEggsAndChests)
+
+webhookInputBox.Text = " "
+
+refreshEggsAndChests()
+watchRiftsFolder()
+
+-- Auto-refresh every second
+while true do
+    task.wait(1)
+    refreshEggsAndChests()
+end
