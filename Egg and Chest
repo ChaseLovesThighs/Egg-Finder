@@ -163,7 +163,6 @@ local function refreshEggsAndChests()
                 end
             end
 
-            -- Get the Y level of the item
             local yValue = 0
             if typeof(item.GetPivot) == "function" then
                 yValue = item:GetPivot().Position.Y
@@ -175,12 +174,10 @@ local function refreshEggsAndChests()
         end
     end
 
-    -- Sort items by their Y-level (ascending order)
     table.sort(items, function(a, b)
         return a.yValue < b.yValue
     end)
 
-    -- Create UI for each item
     for _, data in ipairs(items) do
         local item = data.item
         local luckText = data.luckText
@@ -196,27 +193,24 @@ local function refreshEggsAndChests()
         label.Text = string.format("%s | Luck: %s | Y: %.1f | Timer: %s", item.Name, luckText, data.yValue, timerText)
         label.Parent = scrollFrame
 
-        -- Create teleport button below the item
         local teleportButton = Instance.new("TextButton")
-        teleportButton.Size = UDim2.new(0, 100, 0, 30)  -- Adjust size for each item
+        teleportButton.Size = UDim2.new(0, 100, 0, 30)
         teleportButton.Text = "🔮 Teleport"
         teleportButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         teleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         teleportButton.Font = "SourceSans"
         teleportButton.TextSize = 16
-        teleportButton.Position = UDim2.new(1, -110, 0, 25) -- Position below the label
+        teleportButton.Position = UDim2.new(1, -110, 0, 25)
         teleportButton.Parent = scrollFrame
 
-        -- Teleport action when the button is clicked
         teleportButton.MouseButton1Click:Connect(function()
             local cframeToTeleport = item.PrimaryPart and item.PrimaryPart.CFrame or item:GetPivot()
             if cframeToTeleport then
-                stepTo(cframeToTeleport, 25, 0.025) -- Use the stepTo function for smooth teleportation
+                stepTo(cframeToTeleport, 25, 0.025)
             end
         end)
     end
 
-    -- Update the canvas size based on content
     scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
 end
 
@@ -256,8 +250,29 @@ webhookInputBox.Text = " "
 refreshEggsAndChests()
 watchRiftsFolder()
 
--- Auto-refresh every second
-while true do
-    task.wait(1)
-    refreshEggsAndChests()
-end
+-- Main loop (refresh + other features)
+task.spawn(function()
+	while true do
+		task.wait(1)
+		refreshEggsAndChests()
+
+		-- Auto claim all 9 playtime rewards
+		local remote = game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Framework"):WaitForChild("Network"):WaitForChild("Remote"):WaitForChild("Function")
+		for i = 1, 9 do
+			local args = {
+				[1] = "ClaimPlaytime",
+				[2] = i
+			}
+			pcall(function()
+				remote:InvokeServer(unpack(args))
+			end)
+			task.wait(0.5)
+		end
+
+		-- Auto blow bubble
+		local blowBubble = player:FindFirstChild("BlowBubble", true)
+		if blowBubble and blowBubble:IsA("RemoteEvent") then
+			pcall(function() blowBubble:FireServer() end)
+		end
+	end
+end)
